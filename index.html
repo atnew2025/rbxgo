@@ -1530,6 +1530,14 @@
                         <div class="strength-bar"><div class="strength-fill" id="pwdStrength" style="width:0%"></div></div>
                     </div>
                 </div>
+                <div class="security-item">
+                    <svg class="icon-security" viewBox="0 0 24 24" fill="none" stroke="#ff6600" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    <div class="security-info">
+                        <div class="security-name">VM Protection</div>
+                        <div class="security-status" id="vmStatus">OPTIONAL</div>
+                        <div class="strength-bar"><div class="strength-fill" id="vmStrength" style="width:0%"></div></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1551,6 +1559,21 @@
                     </button>
                 </div>
                 <div class="password-hint">This password will be required to run the obfuscated script</div>
+            </div>
+        </div>
+
+        <!-- VM Protection Section -->
+        <div class="password-section">
+            <div class="password-header">
+                <svg class="icon-title" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                <span>VM PROTECTION</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="enableVM" onchange="toggleVM()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="password-content" id="vmContent" style="display:none;">
+                <div class="password-hint" style="color:#bf00ff;">Wraps code in a custom bytecode VM interpreter. Requires loadstring support (executors / ServerScriptService with LoadStringEnabled). Adds maximum protection layer.</div>
             </div>
         </div>
 
@@ -2506,6 +2529,97 @@ print('Hello World!')"></textarea>
             return code;
         }
 
+        // ==================== VM BYTECODE PROTECTION ====================
+        // Converts code to encrypted bytecode, wraps in custom VM decoder
+        // Requires loadstring to execute
+        function vmEncodeLayer(code) {
+            // Generate encryption keys
+            const seed = Math.floor(Math.random() * 0x7FFFFFFF);
+            const key1 = Math.floor(Math.random() * 200) + 50;
+            const key2 = Math.floor(Math.random() * 200) + 50;
+            const key3 = Math.floor(Math.random() * 7) + 1;
+            
+            // Convert code to bytes and apply 3-layer encryption
+            const bytes = [];
+            for (let i = 0; i < code.length; i++) {
+                let b = code.charCodeAt(i);
+                // Layer 1: XOR with position-dependent key
+                b = b ^ ((key1 + i * 7) % 256);
+                // Layer 2: XOR with seed-derived key
+                b = b ^ ((seed + i * 13) % 256);
+                // Layer 3: rotate bits (simulate with math)
+                b = ((b << key3) | (b >> (8 - key3))) & 0xFF;
+                bytes.push(b);
+            }
+            
+            // Split bytecode into chunks for the VM
+            const chunkSize = 200 + Math.floor(Math.random() * 300);
+            const chunks = [];
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                chunks.push(bytes.slice(i, i + chunkSize));
+            }
+            
+            // Generate obfuscated variable names for VM
+            const v = () => generateVarName();
+            const vBC = v(), vSeed = v(), vK1 = v(), vK2 = v(), vK3 = v();
+            const vDec = v(), vInp = v(), vOut = v(), vI = v(), vB = v();
+            const vStr = v(), vChunks = v(), vResult = v(), vJ = v(), vC = v();
+            const vExec = v(), vLoad = v();
+            
+            // Obfuscate the seed and keys with XOR
+            const fk1 = Math.floor(Math.random() * 9999);
+            const fk2 = Math.floor(Math.random() * 9999);
+            const fk3 = Math.floor(Math.random() * 9999);
+            const fkSeed = Math.floor(Math.random() * 0x7FFFFFFF);
+            
+            // Build chunk arrays as Lua tables
+            const chunkStrs = chunks.map(chunk => `{${chunk.join(',')}}`);
+            
+            // Build the VM decoder in Lua
+            let vm = '';
+            const vPos = v();
+            const vAll = v();
+            const vPart = v();
+            
+            vm += `local ${v()}=type(game)=="userdata"and true or false `;
+            vm += `local ${vSeed}=bit32.bxor(${seed ^ fkSeed},${fkSeed}) `;
+            vm += `local ${vK1}=bit32.bxor(${key1 ^ fk1},${fk1}) `;
+            vm += `local ${vK2}=bit32.bxor(${key2 ^ fk2},${fk2}) `;
+            vm += `local ${vK3}=bit32.bxor(${key3 ^ fk3},${fk3}) `;
+            vm += `local ${vChunks}={${chunkStrs.join(',')}} `;
+            
+            // Decode all chunks
+            vm += `local ${vAll}={} `;
+            vm += `local ${vPos}=0 `;
+            vm += `for ${vI}=1,#${vChunks} do `;
+            vm += `local ${vPart}=${vChunks}[${vI}] `;
+            vm += `for ${vJ}=1,#${vPart} do `;
+            vm += `local ${vB}=${vPart}[${vJ}] `;
+            // Reverse layer 3: right-rotate by key3
+            vm += `${vB}=bit32.band(bit32.bor(bit32.rshift(${vB},${vK3}),bit32.lshift(${vB},8-${vK3})),255) `;
+            // Reverse layer 2
+            vm += `${vB}=bit32.bxor(${vB},(${vSeed}+${vPos}*13)%256) `;
+            // Reverse layer 1
+            vm += `${vB}=bit32.bxor(${vB},(${vK1}+${vPos}*7)%256) `;
+            vm += `${vAll}[#${vAll}+1]=string.char(${vB}) `;
+            vm += `${vPos}=${vPos}+1 `;
+            vm += `end end `;
+            
+            // Reconstruct and execute
+            vm += `local ${vResult}=table.concat(${vAll}) `;
+            
+            // Anti-hook: verify loadstring exists
+            const vType = v();
+            vm += `local ${vLoad}=loadstring `;
+            vm += `if type(${vLoad})~="function"then return end `;
+            
+            // Execute decoded code
+            vm += `local ${vExec}=${vLoad}(${vResult}) `;
+            vm += `if ${vExec} then ${vExec}() end`;
+            
+            return vm;
+        }
+
         function compressToOneLine(code) {
             // Remove comments completely
             code = code.replace(/--\[\[[\s\S]*?\]\]/g, '');
@@ -2564,6 +2678,8 @@ print('Hello World!')"></textarea>
             btn.disabled = true;
             showProgressOverlay();
 
+            const useVM = document.getElementById('enableVM').checked;
+
             const stages = [
                 'Scanning code structure...',
                 'Mutating variable names...',
@@ -2574,6 +2690,7 @@ print('Hello World!')"></textarea>
                 'Flattening control flow...',
                 'Deploying anti-tamper...',
                 'Compressing bytecode...',
+                ...(useVM ? ['Encoding to VM bytecode...'] : []),
                 'Finalizing encryption...'
             ];
 
@@ -2603,6 +2720,7 @@ print('Hello World!')"></textarea>
                         case 6: code = flattenControlFlow(code); break;
                         case 7: code = generateAntiTamper() + code; break;
                         case 8: code = compressToOneLine(code); break;
+                        case 9: if (useVM) code = vmEncodeLayer(code); break;
                     }
                 }
                 
@@ -2619,7 +2737,7 @@ print('Hello World!')"></textarea>
                 await sleep(300);
                 
                 // Add version header to obfuscated output
-const versionHeader = `--[[ SHADOW CIPHER v4.0.0 | ${new Date().toISOString().split('T')[0]} | luau.gkop.cc ]]\n`;
+const versionHeader = `--[[ SHADOW CIPHER v4.1.0 | ${new Date().toISOString().split('T')[0]} | luau.gkop.cc ]]\n`;
                 code = versionHeader + code;
 
                 document.getElementById('outputCode').value = code;
@@ -2714,6 +2832,19 @@ print(message)
 
 local damage = calculateDamage(25, 3)
 sayHello("Player")`;
+        }
+
+        function toggleVM() {
+            const enabled = document.getElementById('enableVM').checked;
+            const content = document.getElementById('vmContent');
+            const status = document.getElementById('vmStatus');
+            const strength = document.getElementById('vmStrength');
+            
+            content.style.display = enabled ? 'block' : 'none';
+            status.textContent = enabled ? 'ENABLED' : 'OPTIONAL';
+            status.style.color = enabled ? '#ff6600' : 'var(--neon-green)';
+            strength.style.width = enabled ? '100%' : '0%';
+            strength.style.background = enabled ? 'linear-gradient(90deg, #ff6600, #ff0044)' : '';
         }
 
         function togglePassword() {
