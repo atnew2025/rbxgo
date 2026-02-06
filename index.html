@@ -1534,8 +1534,8 @@
                     <svg class="icon-security" viewBox="0 0 24 24" fill="none" stroke="#ff6600" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                     <div class="security-info">
                         <div class="security-name">VM Protection</div>
-                        <div class="security-status" id="vmStatus">OPTIONAL</div>
-                        <div class="strength-bar"><div class="strength-fill" id="vmStrength" style="width:0%"></div></div>
+                        <div class="security-status" style="color:#ff6600;">ALWAYS ON</div>
+                        <div class="strength-bar"><div class="strength-fill" style="width:100%;background:linear-gradient(90deg,#ff6600,#ff0044);"></div></div>
                     </div>
                 </div>
             </div>
@@ -1562,20 +1562,6 @@
             </div>
         </div>
 
-        <!-- VM Protection Section -->
-        <div class="password-section">
-            <div class="password-header">
-                <svg class="icon-title" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                <span>VM PROTECTION</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="enableVM" onchange="toggleVM()">
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-            <div class="password-content" id="vmContent" style="display:none;">
-                <div class="password-hint" style="color:#bf00ff;">Wraps code in a custom bytecode VM interpreter. Requires loadstring support (executors / ServerScriptService with LoadStringEnabled). Adds maximum protection layer.</div>
-            </div>
-        </div>
 
         <!-- Mode Tabs -->
         <div class="mode-tabs">
@@ -2572,8 +2558,43 @@ print('Hello World!')"></textarea>
             const fk3 = Math.floor(Math.random() * 9999);
             const fkSeed = Math.floor(Math.random() * 0x7FFFFFFF);
             
-            // Build chunk arrays as Lua tables
-            const chunkStrs = chunks.map(chunk => `{${chunk.join(',')}}`);
+            // Obfuscate each byte value with random math expressions
+            function obfByte(val) {
+                const algo = Math.floor(Math.random() * 5);
+                switch(algo) {
+                    case 0: { // (a-b)
+                        const a = val + Math.floor(Math.random() * 30000) + 1000;
+                        return `(${a}-${a - val})`;
+                    }
+                    case 1: { // (a+b)
+                        const a = Math.floor(Math.random() * val);
+                        return `(${a}+${val - a})`;
+                    }
+                    case 2: { // bit32.bxor(a,b)
+                        const mask = Math.floor(Math.random() * 65535);
+                        return `bit32.bxor(${val ^ mask},${mask})`;
+                    }
+                    case 3: { // (a*b+c)
+                        if (val >= 2) {
+                            const divisors = [];
+                            for (let d = 2; d <= Math.min(val, 20); d++) { if (val % d === 0) divisors.push(d); }
+                            if (divisors.length > 0) {
+                                const d = divisors[Math.floor(Math.random() * divisors.length)];
+                                return `(${d}*${val/d}+0)`;
+                            }
+                        }
+                        const a = val + Math.floor(Math.random() * 9999) + 500;
+                        return `(${a}-${a - val})`;
+                    }
+                    default: { // bit32.band(a, mask) where a=val and mask covers all bits
+                        const extra = Math.floor(Math.random() * 65280) + 256;
+                        return `bit32.band(${val + extra * 256},${255})`;
+                    }
+                }
+            }
+            
+            // Build chunk arrays as Lua tables with obfuscated byte values
+            const chunkStrs = chunks.map(chunk => `{${chunk.map(b => obfByte(b)).join(',')}}`);
             
             // Build the VM decoder in Lua
             let vm = '';
@@ -2678,8 +2699,6 @@ print('Hello World!')"></textarea>
             btn.disabled = true;
             showProgressOverlay();
 
-            const useVM = document.getElementById('enableVM').checked;
-
             const stages = [
                 'Scanning code structure...',
                 'Mutating variable names...',
@@ -2690,7 +2709,7 @@ print('Hello World!')"></textarea>
                 'Flattening control flow...',
                 'Deploying anti-tamper...',
                 'Compressing bytecode...',
-                ...(useVM ? ['Encoding to VM bytecode...'] : []),
+                'Encoding to VM bytecode...',
                 'Finalizing encryption...'
             ];
 
@@ -2720,7 +2739,7 @@ print('Hello World!')"></textarea>
                         case 6: code = flattenControlFlow(code); break;
                         case 7: code = generateAntiTamper() + code; break;
                         case 8: code = compressToOneLine(code); break;
-                        case 9: if (useVM) code = vmEncodeLayer(code); break;
+                        case 9: code = vmEncodeLayer(code); break;
                     }
                 }
                 
@@ -2834,18 +2853,6 @@ local damage = calculateDamage(25, 3)
 sayHello("Player")`;
         }
 
-        function toggleVM() {
-            const enabled = document.getElementById('enableVM').checked;
-            const content = document.getElementById('vmContent');
-            const status = document.getElementById('vmStatus');
-            const strength = document.getElementById('vmStrength');
-            
-            content.style.display = enabled ? 'block' : 'none';
-            status.textContent = enabled ? 'ENABLED' : 'OPTIONAL';
-            status.style.color = enabled ? '#ff6600' : 'var(--neon-green)';
-            strength.style.width = enabled ? '100%' : '0%';
-            strength.style.background = enabled ? 'linear-gradient(90deg, #ff6600, #ff0044)' : '';
-        }
 
         function togglePassword() {
             const enabled = document.getElementById('enablePassword').checked;
