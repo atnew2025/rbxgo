@@ -2305,7 +2305,7 @@ print('Hello World!')"></textarea>
             const va=generateVarName(),vr=generateVarName(),vi=generateVarName(),vv=generateVarName(),vk=generateVarName();
             const fk1=Math.floor(Math.random()*9999),fk2=Math.floor(Math.random()*9999);
             const opaque = generateOpaquePredicate();
-            return `(function()${opaque}local ${vk}=bit32.bxor(${seed^fk1},${fk1}) local ${va}={${enc.join(',')}} local ${vr}={} for ${vi}=1,#${va} do local ${vv}=bit32.bxor(${va}[${vi}],(bit32.rshift(${vk},2))%64) ${vv}=${vv}-(${vi}-1)*3-7 ${vr}[${vi}]=string.char(bit32.bxor(${vv},${vk}%128)) end return table.concat(${vr}) end)()`;
+            return `(function()${opaque}local ${vk}=bit32.bxor(${seed^fk1},${fk1}) local ${va}={${enc.join(',')}} local ${vr}={} for ${vi}=1,#${va} do local ${vv}=bit32.bxor(${va}[${vi}],(bit32.rshift(${vk},2))%64) ${vv}=${vv}-((${vi}-1)*3)-7 ${vr}[${vi}]=string.char(bit32.bxor(${vv},${vk}%128)) end return table.concat(${vr}) end)()`;
         }
         
         // Algorithm 4: Nested IIFE with scattered computation
@@ -2460,8 +2460,9 @@ print('Hello World!')"></textarea>
                 const k = Math.floor(Math.random() * 90) + 10;
                 return `(${n + k}-${k})`;
             };
-            // Only replace simple literal math to avoid breaking syntax
-            return code.replace(/\b(\d+)\b\s*([+\-*/])\s*\b(\d+)\b/g, (m, a, op, b) => {
+            // Only replace standalone literal math - require first number NOT preceded
+            // by operator (prevents matching e.g. *3-7 across expression boundaries)
+            return code.replace(/(?<![*\/+\-])\b(\d+)\b\s*([+\-*/])\s*\b(\d+)\b(?![*\/])/g, (m, a, op, b) => {
                 return `(${obfNum(a)}${op}${obfNum(b)})`;
             });
         }
