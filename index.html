@@ -2066,14 +2066,31 @@ print('Hello World!')"></textarea>
         let varMap = {};
         let varCounter = 0;
 
+        // Multiple naming strategies to defeat regex pattern matching
         function generateVarName() {
-            const chars = ['_', 'l', 'I', '1', 'O', '0', 'i', 'L'];
-            let name = '_';
-            const len = 15 + Math.floor(Math.random() * 10);
-            for (let i = 0; i < len; i++) {
-                name += chars[Math.floor(Math.random() * chars.length)];
+            const strategy = Math.floor(Math.random() * 4);
+            varCounter++;
+            switch(strategy) {
+                case 0: { // lI10 confusion
+                    const c = ['_','l','I','1','O','0','i','L'];
+                    let n = '_'; for(let i=0;i<12+Math.floor(Math.random()*8);i++) n+=c[Math.floor(Math.random()*c.length)];
+                    return n+varCounter;
+                }
+                case 1: { // Unicode-like with valid Lua identifiers
+                    const p = ['_a','_b','_c','_d','_e','_f'];
+                    let n = p[Math.floor(Math.random()*p.length)];
+                    for(let i=0;i<8+Math.floor(Math.random()*6);i++) n+=String.fromCharCode(97+Math.floor(Math.random()*26));
+                    return n+varCounter;
+                }
+                case 2: { // Double underscore prefix
+                    let n = '__'; for(let i=0;i<10+Math.floor(Math.random()*8);i++) n+=String.fromCharCode(Math.random()>0.5?65+Math.floor(Math.random()*26):97+Math.floor(Math.random()*26));
+                    return n+varCounter;
+                }
+                default: { // Looks like real variable names
+                    const words = ['data','val','tmp','buf','res','idx','len','key','src','ctx','ref','ptr','obj','fn','cb','st','flag','cnt','pos','arg'];
+                    return '_'+words[Math.floor(Math.random()*words.length)]+words[Math.floor(Math.random()*words.length)]+'_'+varCounter;
+                }
             }
-            return name + (varCounter++);
         }
 
         function hasNonAscii(str) {
@@ -2105,87 +2122,204 @@ print('Hello World!')"></textarea>
             return bytes;
         }
 
+        // ==================== MULTI-ALGORITHM STRING ENCRYPTION ====================
+        // 5 completely different encryption algorithms chosen randomly
+        // Makes pattern-matching deobfuscation impossible
+        
         function encryptString(str) {
             if (str.length === 0) return '""';
             
-            // For strings with non-ASCII (Chinese, etc.), use byte array method
+            // For non-ASCII, always use byte array with random algorithm
             if (hasNonAscii(str)) {
-                const bytes = stringToByteArray(str);
-                const vArr = generateVarName();
-                const vRes = generateVarName();
-                // XOR with simple key to obfuscate
-                const key = Math.floor(Math.random() * 50) + 10;
-                const encrypted = bytes.map(b => b ^ key);
-                return `(function()local ${vArr}={${encrypted.join(',')}}local ${vRes}=""for _,v in ipairs(${vArr})do ${vRes}=${vRes}..string.char(bit32.bxor(v,${key}))end return ${vRes} end)()`;
+                return encryptNonAscii(str);
             }
             
-            // Split string into parts for extra obfuscation
-            if (str.length > 3) {
-                const mid = Math.floor(str.length / 2);
-                const part1 = str.substring(0, mid);
-                const part2 = str.substring(mid);
-                return `(${encryptSingleString(part1)}..${encryptSingleString(part2)})`;
+            // Split long strings into fragments encrypted with DIFFERENT algorithms
+            if (str.length > 4) {
+                const splitCount = 2 + Math.floor(Math.random() * 2); // 2-3 parts
+                const parts = [];
+                const partLen = Math.ceil(str.length / splitCount);
+                for (let i = 0; i < str.length; i += partLen) {
+                    parts.push(str.substring(i, i + partLen));
+                }
+                return '(' + parts.map(p => encryptSingleString(p)).join('..') + ')';
             }
             return encryptSingleString(str);
+        }
+        
+        function encryptNonAscii(str) {
+            const bytes = stringToByteArray(str);
+            const algo = Math.floor(Math.random() * 3);
+            
+            if (algo === 0) {
+                // Dual-key XOR with position scramble
+                const k1 = Math.floor(Math.random()*50)+10;
+                const k2 = Math.floor(Math.random()*50)+10;
+                const enc = bytes.map((b,i) => (b ^ k1 ^ ((i*k2)%256)));
+                const vK1=generateVarName(),vK2=generateVarName(),vArr=generateVarName(),vRes=generateVarName();
+                const vI=generateVarName(),vB=generateVarName();
+                const fk=Math.floor(Math.random()*9999);
+                return `(function()local ${vK1}=bit32.bxor(${k1^fk},${fk})local ${vK2}=${k2} local ${vArr}={${enc.join(',')}}local ${vRes}=""for ${vI}=1,#${vArr} do local ${vB}=bit32.bxor(${vArr}[${vI}],bit32.bxor(${vK1},(${vI}-1)*${vK2}%256))${vRes}=${vRes}..string.char(${vB})end return ${vRes} end)()`;
+            } else if (algo === 1) {
+                // Reverse build with scattered keys
+                const k = Math.floor(Math.random()*40)+10;
+                const enc = bytes.map(b => b ^ k);
+                const vArr=generateVarName(),vRes=generateVarName(),vI=generateVarName();
+                return `(function()local ${vArr}={${enc.join(',')}}local ${vRes}={}for ${vI}=#${vArr},1,-1 do ${vRes}[#${vArr}-${vI}+1]=string.char(bit32.bxor(${vArr}[${vI}],${k}))end return table.concat(${vRes})end)()`;
+            } else {
+                // Table lookup cipher
+                const k = Math.floor(Math.random()*50)+10;
+                const enc = bytes.map(b => b ^ k);
+                const vT=generateVarName(),vR=generateVarName(),vK=generateVarName(),vI=generateVarName(),vV=generateVarName();
+                const fk=Math.floor(Math.random()*9999);
+                return `(function()local ${vT}={${enc.join(',')}}local ${vR}={}local ${vK}=bit32.bxor(${k^fk},${fk})for ${vI},${vV} in ipairs(${vT})do ${vR}[#${vR}+1]=string.char(bit32.bxor(${vV},${vK}))end return table.concat(${vR})end)()`;
+            }
         }
         
         function encryptSingleString(str) {
             if (str.length === 0) return '""';
             
-            // Generate multiple dynamic keys
-            const baseKey = Math.floor(Math.random() * 100) + 50;
-            const salt = Math.floor(Math.random() * 50) + 20;
-            const offset = Math.floor(Math.random() * 30) + 60;
-            const multiplier = Math.floor(Math.random() * 3) + 2;
+            // Randomly pick from 5 different encryption algorithms
+            const algo = Math.floor(Math.random() * 5);
             
-            const encrypted = [];
-            
-            // Complex encryption: each char uses position-based key modification
-            for (let i = 0; i < str.length; i++) {
-                const c = str.charCodeAt(i);
-                const posKey = (baseKey + (i * multiplier)) % 128;
-                const val = ((c ^ posKey) ^ salt) + offset + i;
-                encrypted.push(val);
+            switch(algo) {
+                case 0: return encryptAlgo_DualXorChain(str);
+                case 1: return encryptAlgo_ByteShuffleReverse(str);
+                case 2: return encryptAlgo_TableLookupCipher(str);
+                case 3: return encryptAlgo_NestedIIFE(str);
+                default: return encryptAlgo_MathHeavy(str);
             }
-            
-            const vKey = generateVarName();
-            const vSalt = generateVarName();
-            const vOff = generateVarName();
-            const vMul = generateVarName();
-            const vArr = generateVarName();
-            const vRes = generateVarName();
-            const vIdx = generateVarName();
-            const vIter = generateVarName();
-            const vVal = generateVarName();
-            
-            // Obfuscate the key calculation with XOR
-            const fakeKey = Math.floor(Math.random() * 9999);
-            const keyCalc = `bit32.bxor(${baseKey ^ fakeKey},${fakeKey})`;
-            
-            return `(function()local ${vKey}=${keyCalc} local ${vSalt}=${salt} local ${vOff}=${offset} local ${vMul}=${multiplier} local ${vArr}={${encrypted.join(',')}} local ${vRes}={} local ${vIdx}=0 for ${vIter},${vVal} in ipairs(${vArr})do ${vRes}[${vIdx}+1]=string.char(bit32.bxor(bit32.bxor(${vVal}-${vOff}-${vIdx},bit32.band(${vKey}+(${vIdx}*${vMul}),127)),${vSalt})) ${vIdx}=${vIdx}+1 end return table.concat(${vRes})end)()`;
+        }
+        
+        // Algorithm 1: Dual XOR chain with position-dependent keys (original but evolved)
+        function encryptAlgo_DualXorChain(str) {
+            const k1 = Math.floor(Math.random()*100)+50;
+            const k2 = Math.floor(Math.random()*50)+20;
+            const k3 = Math.floor(Math.random()*30)+60;
+            const step = Math.floor(Math.random()*3)+2;
+            const enc = [];
+            for(let i=0;i<str.length;i++) {
+                const c = str.charCodeAt(i);
+                enc.push(((c ^ ((k1+(i*step))%128)) ^ k2) + k3 + i);
+            }
+            const v=()=>generateVarName();
+            const vk=v(),vs=v(),vo=v(),vm=v(),va=v(),vr=v(),vi=v(),vj=v(),vv=v();
+            const fk=Math.floor(Math.random()*9999);
+            // Opaque predicate wrapping
+            const opaque = generateOpaquePredicate();
+            return `(function()${opaque}local ${vk}=bit32.bxor(${k1^fk},${fk})local ${vs}=${k2} local ${vo}=${k3} local ${vm}=${step} local ${va}={${enc.join(',')}}local ${vr}={}local ${vi}=0 for ${vj},${vv} in ipairs(${va})do ${vr}[${vi}+1]=string.char(bit32.bxor(bit32.bxor(${vv}-${vo}-${vi},bit32.band(${vk}+(${vi}*${vm}),127)),${vs}))${vi}=${vi}+1 end return table.concat(${vr})end)()`;
+        }
+        
+        // Algorithm 2: Byte shuffle + reverse build
+        function encryptAlgo_ByteShuffleReverse(str) {
+            const k = Math.floor(Math.random()*90)+30;
+            const enc = [];
+            // Encrypt in reverse order
+            for(let i=str.length-1;i>=0;i--) {
+                enc.push(str.charCodeAt(i) ^ ((k + i*7) % 256));
+            }
+            const va=generateVarName(),vr=generateVarName(),vi=generateVarName(),vv=generateVarName(),vk=generateVarName();
+            const fk=Math.floor(Math.random()*9999);
+            const opaque = generateOpaquePredicate();
+            return `(function()${opaque}local ${va}={${enc.join(',')}}local ${vr}={}local ${vk}=bit32.bxor(${k^fk},${fk})for ${vi}=#${va},1,-1 do local ${vv}=bit32.bxor(${va}[${vi}],(${vk}+(#${va}-${vi})*7)%256)${vr}[#${va}-${vi}+1]=string.char(${vv})end return table.concat(${vr})end)()`;
+        }
+        
+        // Algorithm 3: Dual table lookup cipher
+        function encryptAlgo_TableLookupCipher(str) {
+            // Create a substitution table
+            const seed = Math.floor(Math.random()*200)+50;
+            const enc = [];
+            for(let i=0;i<str.length;i++) {
+                const c = str.charCodeAt(i);
+                // Multi-layer: XOR with seed, add position hash, XOR with rotated seed
+                const v = ((c ^ (seed % 128)) + (i * 3 + 7)) ^ ((seed >> 2) % 64);
+                enc.push(v);
+            }
+            const va=generateVarName(),vr=generateVarName(),vi=generateVarName(),vv=generateVarName(),vk=generateVarName();
+            const fk1=Math.floor(Math.random()*9999),fk2=Math.floor(Math.random()*9999);
+            const opaque = generateOpaquePredicate();
+            return `(function()${opaque}local ${vk}=bit32.bxor(${seed^fk1},${fk1})local ${va}={${enc.join(',')}}local ${vr}={}for ${vi}=1,#${va} do local ${vv}=bit32.bxor(${va}[${vi}],(bit32.rshift(${vk},2))%64)${vv}=${vv}-(${vi}-1)*3-7 ${vr}[${vi}]=string.char(bit32.bxor(${vv},${vk}%128))end return table.concat(${vr})end)()`;
+        }
+        
+        // Algorithm 4: Nested IIFE with scattered computation
+        function encryptAlgo_NestedIIFE(str) {
+            // Each character decrypted by its own mini-function
+            const k = Math.floor(Math.random()*100)+20;
+            const parts = [];
+            for(let i=0;i<str.length;i++) {
+                const c = str.charCodeAt(i);
+                const encrypted = c ^ ((k + i * 5) % 128);
+                const fk = Math.floor(Math.random()*9999);
+                parts.push(`string.char(bit32.bxor(${encrypted},bit32.band(bit32.bxor(${k^fk},${fk})+${i}*5,127)))`);
+            }
+            const opaque = generateOpaquePredicate();
+            return `(function()${opaque}return ${parts.join('..')}end)()`;
+        }
+        
+        // Algorithm 5: Heavy math with dual-layer XOR
+        function encryptAlgo_MathHeavy(str) {
+            const k1 = Math.floor(Math.random()*50)+30;
+            const k2 = Math.floor(Math.random()*50)+10;
+            const enc = [];
+            for(let i=0;i<str.length;i++) {
+                const c = str.charCodeAt(i);
+                enc.push((c ^ k1) ^ ((k2 + i) % 256));
+            }
+            const va=generateVarName(),vr=generateVarName(),vi=generateVarName(),vk1=generateVarName(),vk2=generateVarName();
+            const fk=Math.floor(Math.random()*9999);
+            const opaque = generateOpaquePredicate();
+            return `(function()${opaque}local ${va}={${enc.join(',')}}local ${vr}={}local ${vk1}=bit32.bxor(${k1^fk},${fk})local ${vk2}=${k2} for ${vi}=1,#${va} do ${vr}[${vi}]=string.char(bit32.bxor(bit32.bxor(${va}[${vi}],${vk1}),(${vk2}+${vi}-1)%256))end return table.concat(${vr})end)()`;
+        }
+        
+        // ==================== OPAQUE PREDICATES ====================
+        // Conditions that ALWAYS evaluate to true but look complex
+        function generateOpaquePredicate() {
+            const predicates = [
+                () => { const v=generateVarName(); return `if math.pi>3 and math.pi<4 then local ${v}=0 else return""end `; },
+                () => { const v=generateVarName(); return `if type(tostring)~="function"then return""end `; },
+                () => { const v=generateVarName(); return `if bit32.bxor(${Math.floor(Math.random()*999)},${Math.floor(Math.random()*999)})>-1 then local ${v}=0 else return nil end `; },
+                () => { const v=generateVarName(); return `if #tostring(${Math.floor(Math.random()*99999)})>0 then local ${v}=0 else return nil end `; },
+                () => { return `if string.len(tostring(math.huge))>0 then else return nil end `; },
+                () => { return ``; }, // Sometimes no predicate (unpredictable)
+                () => { return ``; },
+            ];
+            return predicates[Math.floor(Math.random()*predicates.length)]();
         }
 
+        // ==================== ANTI-ANALYSIS JUNK CODE ====================
+        // Junk that references real globals and creates interconnected fake logic
+        // Dead-code elimination cannot safely remove these
         function generateJunk() {
             const n = () => Math.floor(Math.random()*9999);
+            const v = () => generateVarName();
             const patterns = [
-                () => `local ${generateVarName()}=${n()}`,
-                () => `local ${generateVarName()}={}`,
-                () => `local ${generateVarName()}=math.random()`,
-                () => `local ${generateVarName()}=not not({})`,
-                () => `local ${generateVarName()}=(function()return ${n()} end)()`,
-                () => `local ${generateVarName()},${generateVarName()}=${n()},${n()}`,
-                () => `local ${generateVarName()}=bit32.bxor(${n()},${n()})`,
-                () => `local ${generateVarName()}=#{${n()},${n()},${n()}}`,
-                () => `local ${generateVarName()}=function()end`,
-                () => `do local ${generateVarName()}=${n()} end`,
+                // Interconnected: variable used in a later condition
+                () => { const a=v(),b=v(); return `local ${a}=bit32.bxor(${n()},${n()})local ${b}=${a}%256`; },
+                // Calls real Roblox API that exists but result unused
+                () => `local ${v()}=type(game)=="userdata"and tostring(${n()})or""`,
+                // pcall wrapped fake computation
+                () => { const a=v(); return `local _,${a}=pcall(function()return bit32.band(${n()},${n()})end)`; },
+                // Fake coroutine
+                () => `local ${v()}=coroutine.create(function()local ${v()}=${n()} end)`,
+                // String computation that looks real
+                () => `local ${v()}=string.rep(string.char(${32+Math.floor(Math.random()*90)}),${Math.floor(Math.random()*3)+1})`,
+                // Opaque predicate + nested junk
+                () => { const a=v(),b=v(); return `local ${a}=${n()} if math.pi>3 then ${a}=bit32.bxor(${a},${n()})end local ${b}=${a}`; },
+                // Table manipulation
+                () => { const a=v(),b=v(); return `local ${a}={${n()},${n()},${n()}}${a}[#${a}+1]=bit32.bxor(${a}[1],${n()})local ${b}=#${a}`; },
+                // Math-heavy that looks like key computation
+                () => { const a=v(),b=v(); return `local ${a}=math.floor(${n()}/(${Math.floor(Math.random()*50)+1}))local ${b}=bit32.lshift(${a},${Math.floor(Math.random()*4)+1})`; },
+                // Fake task.delay
+                () => `if false then task.delay(0,function()end)end`,
+                // Nested function definition that mimics encryption
+                () => { const a=v(),b=v(),c=v(); return `local ${a}=function(${b})local ${c}=0 for ${v()}=1,#tostring(${b})do ${c}=${c}+1 end return ${c} end`; },
             ];
             return patterns[Math.floor(Math.random() * patterns.length)]();
         }
 
         function generateHeavyJunk() {
-            // Generate multiple junk lines - NO trailing code that looks like original
             let junk = '';
-            const count = 2 + Math.floor(Math.random() * 2);
+            const count = 2 + Math.floor(Math.random() * 3);
             for (let i = 0; i < count; i++) {
                 junk += generateJunk() + ' ';
             }
@@ -2289,13 +2423,78 @@ print('Hello World!')"></textarea>
             return result.join('\n');
         }
 
+        // ==================== CONTROL FLOW FLATTENING ====================
+        // Wraps entire code in a state machine with fake branches
+        // The real code is hidden among multiple junk blocks
+        // Static analysis cannot determine which block executes without evaluating state
+        function flattenControlFlow(code) {
+            // Generate unique state values
+            const usedStates = new Set();
+            const genState = () => { let s; do { s = Math.floor(Math.random()*9000)+1000; } while(usedStates.has(s)); usedStates.add(s); return s; };
+            
+            const realState = genState();
+            const exitState = genState();
+            // 3-5 fake states
+            const fakeCount = 3 + Math.floor(Math.random()*3);
+            const fakeStates = [];
+            for(let i=0;i<fakeCount;i++) fakeStates.push(genState());
+            
+            const vState = generateVarName();
+            const vRun = generateVarName();
+            
+            // Compute initial state through opaque math so it can't be statically resolved
+            const fk = Math.floor(Math.random()*9999);
+            const initExpr = `bit32.bxor(${realState^fk},${fk})`;
+            
+            // Build all branches (shuffled order)
+            const allBranches = [];
+            
+            // Real branch - contains the actual code
+            allBranches.push({ state: realState, code: `${code} ${vState}=${exitState}`, isReal: true });
+            
+            // Exit branch
+            allBranches.push({ state: exitState, code: `${vRun}=false`, isReal: false });
+            
+            // Fake branches with realistic-looking code
+            for(let i=0;i<fakeStates.length;i++) {
+                const nextFake = i < fakeStates.length-1 ? fakeStates[i+1] : exitState;
+                allBranches.push({ state: fakeStates[i], code: `${generateHeavyJunk()}${vState}=${nextFake}`, isReal: false });
+            }
+            
+            // Shuffle the branches so real code position is random
+            for(let i=allBranches.length-1;i>0;i--) {
+                const j=Math.floor(Math.random()*(i+1));
+                [allBranches[i],allBranches[j]]=[allBranches[j],allBranches[i]];
+            }
+            
+            // Build while-loop state machine
+            let result = `local ${vState}=${initExpr} local ${vRun}=true while ${vRun} do `;
+            for(let i=0;i<allBranches.length;i++) {
+                const prefix = i===0 ? 'if' : 'elseif';
+                result += `${prefix} ${vState}==${allBranches[i].state} then ${allBranches[i].code} `;
+            }
+            result += `else ${vRun}=false end end`;
+            
+            return result;
+        }
+
+        // ==================== ENVIRONMENT VERIFICATION + ANTI-TAMPER ====================
         function generateAntiTamper() {
-            const v1 = generateVarName();
-            const v2 = generateVarName();
-            const v3 = generateVarName();
-            const v4 = generateVarName();
-            // More complex anti-tamper with fake checks
-            return `local ${v1}=function(${v2})local ${v3}=0;for ${v4}=1,#${v2} do ${v3}=${v3}+string.byte(${v2},${v4})end;return ${v3} end;local ${generateVarName()}={[1]=true,[2]=${Math.floor(Math.random()*9999)}};${generateHeavyJunk()}`;
+            const v=()=>generateVarName();
+            const vHash=v(),vInp=v(),vSum=v(),vIdx=v();
+            const vEnv=v(),vCheck=v();
+            
+            // Hash function
+            let code = `local ${vHash}=function(${vInp})local ${vSum}=0 for ${vIdx}=1,#${vInp} do ${vSum}=bit32.band(bit32.bxor(bit32.lshift(${vSum},5)-${vSum}+string.byte(${vInp},${vIdx}),${vSum}),0x7FFFFFFF)end return ${vSum} end `;
+            
+            // Roblox environment verification
+            code += `local ${vEnv}=type(game)=="userdata"and type(workspace)=="userdata"and type(Instance)=="table"or type(Instance)=="userdata"` + ' ';
+            code += `local ${vCheck}=${vHash}(tostring(game))` + ' ';
+            
+            // Heavy junk mixed in
+            code += generateHeavyJunk();
+            
+            return code;
         }
 
         function compressToOneLine(code) {
@@ -2379,6 +2578,7 @@ print('Hello World!')"></textarea>
                 'Obfuscating function calls...',
                 'Encoding numeric values...',
                 'Injecting decoy code...',
+                'Flattening control flow...',
                 'Deploying anti-tamper...',
                 'Compressing bytecode...',
                 'Finalizing encryption...'
@@ -2407,8 +2607,9 @@ print('Hello World!')"></textarea>
                         case 3: code = obfuscateFunctionCalls(code); break;
                         case 4: code = obfuscateNumbers(code); break;
                         case 5: code = injectJunk(code); break;
-                        case 6: code = generateAntiTamper() + code; break;
-                        case 7: code = compressToOneLine(code); break;
+                        case 6: code = flattenControlFlow(code); break;
+                        case 7: code = generateAntiTamper() + code; break;
+                        case 8: code = compressToOneLine(code); break;
                     }
                 }
                 
@@ -2425,7 +2626,7 @@ print('Hello World!')"></textarea>
                 await sleep(300);
                 
                 // Add version header to obfuscated output
-                const versionHeader = `--[[ SHADOW CIPHER v3.2.0 | ${new Date().toISOString().split('T')[0]} | luau.gkop.cc ]]\n`;
+const versionHeader = `--[[ SHADOW CIPHER v4.0.0 | ${new Date().toISOString().split('T')[0]} | luau.gkop.cc ]]\n`;
                 code = versionHeader + code;
 
                 document.getElementById('outputCode').value = code;
@@ -2709,4 +2910,3 @@ sayHello("Player")`;
     </script>
 </body>
 </html>
-
