@@ -2082,17 +2082,17 @@ print('Hello World!')"></textarea>
             switch(strategy) {
                 case 0: { // lI10 confusion
                     const c = ['_','l','I','1','O','0','i','L'];
-                    let n = '_'; for(let i=0;i<12+Math.floor(Math.random()*8);i++) n+=c[Math.floor(Math.random()*c.length)];
+                    let n = '_'; for(let i=0;i<4+Math.floor(Math.random()*4);i++) n+=c[Math.floor(Math.random()*c.length)];
                     return n+varCounter;
                 }
                 case 1: { // Unicode-like with valid Lua identifiers
                     const p = ['_a','_b','_c','_d','_e','_f'];
                     let n = p[Math.floor(Math.random()*p.length)];
-                    for(let i=0;i<8+Math.floor(Math.random()*6);i++) n+=String.fromCharCode(97+Math.floor(Math.random()*26));
+                    for(let i=0;i<3+Math.floor(Math.random()*4);i++) n+=String.fromCharCode(97+Math.floor(Math.random()*26));
                     return n+varCounter;
                 }
                 case 2: { // Double underscore prefix
-                    let n = '__'; for(let i=0;i<10+Math.floor(Math.random()*8);i++) n+=String.fromCharCode(Math.random()>0.5?65+Math.floor(Math.random()*26):97+Math.floor(Math.random()*26));
+                    let n = '__'; for(let i=0;i<4+Math.floor(Math.random()*4);i++) n+=String.fromCharCode(Math.random()>0.5?65+Math.floor(Math.random()*26):97+Math.floor(Math.random()*26));
                     return n+varCounter;
                 }
                 default: { // Looks like real variable names
@@ -2143,11 +2143,10 @@ print('Hello World!')"></textarea>
                 return encryptNonAscii(str);
             }
             
-            // Split long strings into fragments encrypted with DIFFERENT algorithms
-            if (str.length > 4) {
-                const splitCount = 2 + Math.floor(Math.random() * 2); // 2-3 parts
+            // Only split long strings; short ones use single algorithm
+            if (str.length > 12) {
                 const parts = [];
-                const partLen = Math.ceil(str.length / splitCount);
+                const partLen = Math.ceil(str.length / 2);
                 for (let i = 0; i < str.length; i += partLen) {
                     parts.push(str.substring(i, i + partLen));
                 }
@@ -2170,11 +2169,12 @@ print('Hello World!')"></textarea>
                 const fk=Math.floor(Math.random()*9999);
                 return `(function()local ${vK1}=bit32.bxor(${k1^fk},${fk})local ${vK2}=${k2} local ${vArr}={${enc.join(',')}}local ${vRes}=""for ${vI}=1,#${vArr} do local ${vB}=bit32.bxor(${vArr}[${vI}],bit32.bxor(${vK1},(${vI}-1)*${vK2}%256))${vRes}=${vRes}..string.char(${vB})end return ${vRes} end)()`;
             } else if (algo === 1) {
-                // Reverse build with scattered keys
+                // Forward build with obfuscated key
                 const k = Math.floor(Math.random()*40)+10;
                 const enc = bytes.map(b => b ^ k);
-                const vArr=generateVarName(),vRes=generateVarName(),vI=generateVarName();
-                return `(function()local ${vArr}={${enc.join(',')}}local ${vRes}={}for ${vI}=#${vArr},1,-1 do ${vRes}[#${vArr}-${vI}+1]=string.char(bit32.bxor(${vArr}[${vI}],${k}))end return table.concat(${vRes})end)()`;
+                const vArr=generateVarName(),vRes=generateVarName(),vI=generateVarName(),vK=generateVarName();
+                const fk=Math.floor(Math.random()*9999);
+                return `(function()local ${vK}=bit32.bxor(${k^fk},${fk})local ${vArr}={${enc.join(',')}}local ${vRes}={}for ${vI}=1,#${vArr} do ${vRes}[${vI}]=string.char(bit32.bxor(${vArr}[${vI}],${vK}))end return table.concat(${vRes})end)()`;
             } else {
                 // Table lookup cipher
                 const k = Math.floor(Math.random()*50)+10;
@@ -2188,14 +2188,13 @@ print('Hello World!')"></textarea>
         function encryptSingleString(str) {
             if (str.length === 0) return '""';
             
-            // Randomly pick from 5 different encryption algorithms
-            const algo = Math.floor(Math.random() * 5);
+            // Randomly pick from 4 compact encryption algorithms
+            const algo = Math.floor(Math.random() * 4);
             
             switch(algo) {
                 case 0: return encryptAlgo_DualXorChain(str);
                 case 1: return encryptAlgo_ByteShuffleReverse(str);
                 case 2: return encryptAlgo_TableLookupCipher(str);
-                case 3: return encryptAlgo_NestedIIFE(str);
                 default: return encryptAlgo_MathHeavy(str);
             }
         }
@@ -2286,10 +2285,10 @@ print('Hello World!')"></textarea>
             // IMPORTANT: predicates must NOT call tostring/print/warn/error/tonumber
             // because function call obfuscation would replace them and cause nil refs
             const predicates = [
-                () => { const v=generateVarName(); return `if math.pi>3 and math.pi<4 then local ${v}=0 else return""end `; },
+                () => { const v=generateVarName(); return `if math.pi>3 then local ${v}=0 else return""end `; },
                 () => { const v=generateVarName(); return `if bit32.bxor(${Math.floor(Math.random()*999)},${Math.floor(Math.random()*999)})>-1 then local ${v}=0 else return nil end `; },
-                () => { const v=generateVarName(); return `if ${Math.floor(Math.random()*999)+1}>${Math.floor(Math.random()*10)} then local ${v}=0 else return nil end `; },
-                () => { const v=generateVarName(); return `if bit32.band(${Math.floor(Math.random()*9999)},255)>-1 then local ${v}=0 else return nil end `; },
+                () => { return ``; },
+                () => { return ``; },
                 () => { return ``; },
                 () => { return ``; },
                 () => { return ``; },
@@ -2329,12 +2328,7 @@ print('Hello World!')"></textarea>
         }
 
         function generateHeavyJunk() {
-            let junk = '';
-            const count = 2 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < count; i++) {
-                junk += generateJunk() + ' ';
-            }
-            return junk;
+            return generateJunk() + ' ';
         }
 
         function obfuscateVariables(code) {
@@ -2429,9 +2423,8 @@ print('Hello World!')"></textarea>
                                    !stripped.endsWith('else') &&
                                    !stripped.endsWith('function') &&
                                    !stripped.includes('function(');
-                    // Inject more frequently with heavier junk
-                    if (isSafe && Math.random() < 0.25) {
-                        result.push(generateHeavyJunk());
+                    if (isSafe && Math.random() < 0.12) {
+                        result.push(generateJunk());
                     }
                 }
             }
@@ -2450,8 +2443,8 @@ print('Hello World!')"></textarea>
             
             const realState = genState();
             const exitState = genState();
-            // 3-5 fake states
-            const fakeCount = 3 + Math.floor(Math.random()*3);
+            // 2-3 fake states
+            const fakeCount = 2 + Math.floor(Math.random()*2);
             const fakeStates = [];
             for(let i=0;i<fakeCount;i++) fakeStates.push(genState());
             
@@ -2474,7 +2467,7 @@ print('Hello World!')"></textarea>
             // Fake branches with realistic-looking code
             for(let i=0;i<fakeStates.length;i++) {
                 const nextFake = i < fakeStates.length-1 ? fakeStates[i+1] : exitState;
-                allBranches.push({ state: fakeStates[i], code: `${generateHeavyJunk()}${vState}=${nextFake}`, isReal: false });
+                allBranches.push({ state: fakeStates[i], code: `${generateJunk()} ${vState}=${nextFake}`, isReal: false });
             }
             
             // Shuffle the branches so real code position is random
@@ -2509,8 +2502,8 @@ print('Hello World!')"></textarea>
             code += `local ${vStr}=type(game)=="userdata"and"Roblox"or"" `;
             code += `local ${vCheck}=${vHash}(${vStr})` + ' ';
             
-            // Heavy junk mixed in
-            code += generateHeavyJunk();
+            // Light junk mixed in
+            code += generateJunk();
             
             return code;
         }
@@ -2558,30 +2551,16 @@ print('Hello World!')"></textarea>
             const fk3 = Math.floor(Math.random() * 9999);
             const fkSeed = Math.floor(Math.random() * 0x7FFFFFFF);
             
-            // Obfuscate byte values - mix of simple and complex expressions
+            // Obfuscate ~25% of byte values, leave rest as plain numbers
             function obfByte(val) {
+                if (Math.random() > 0.25) return `${val}`;
                 const r = Math.random();
-                if (r < 0.4) {
-                    // Simple subtraction (fast, small output)
-                    const a = val + Math.floor(Math.random() * 9000) + 100;
+                if (r < 0.5) {
+                    const a = val + Math.floor(Math.random() * 900) + 100;
                     return `(${a}-${a - val})`;
-                } else if (r < 0.7) {
-                    // Simple addition
+                } else {
                     const a = Math.floor(Math.random() * (val + 1));
                     return `(${a}+${val - a})`;
-                } else if (r < 0.85) {
-                    // XOR
-                    const mask = Math.floor(Math.random() * 65535);
-                    return `bit32.bxor(${val ^ mask},${mask})`;
-                } else {
-                    // Multiply + remainder
-                    if (val >= 2) {
-                        for (let d = 2; d <= Math.min(val, 12); d++) {
-                            if (val % d === 0) return `(${d}*${val/d})`;
-                        }
-                    }
-                    const a = val + Math.floor(Math.random() * 5000) + 100;
-                    return `(${a}-${a - val})`;
                 }
             }
             
