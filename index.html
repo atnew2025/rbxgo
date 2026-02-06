@@ -2558,38 +2558,30 @@ print('Hello World!')"></textarea>
             const fk3 = Math.floor(Math.random() * 9999);
             const fkSeed = Math.floor(Math.random() * 0x7FFFFFFF);
             
-            // Obfuscate each byte value with random math expressions
+            // Obfuscate byte values - mix of simple and complex expressions
             function obfByte(val) {
-                const algo = Math.floor(Math.random() * 5);
-                switch(algo) {
-                    case 0: { // (a-b)
-                        const a = val + Math.floor(Math.random() * 30000) + 1000;
-                        return `(${a}-${a - val})`;
-                    }
-                    case 1: { // (a+b)
-                        const a = Math.floor(Math.random() * val);
-                        return `(${a}+${val - a})`;
-                    }
-                    case 2: { // bit32.bxor(a,b)
-                        const mask = Math.floor(Math.random() * 65535);
-                        return `bit32.bxor(${val ^ mask},${mask})`;
-                    }
-                    case 3: { // (a*b+c)
-                        if (val >= 2) {
-                            const divisors = [];
-                            for (let d = 2; d <= Math.min(val, 20); d++) { if (val % d === 0) divisors.push(d); }
-                            if (divisors.length > 0) {
-                                const d = divisors[Math.floor(Math.random() * divisors.length)];
-                                return `(${d}*${val/d}+0)`;
-                            }
+                const r = Math.random();
+                if (r < 0.4) {
+                    // Simple subtraction (fast, small output)
+                    const a = val + Math.floor(Math.random() * 9000) + 100;
+                    return `(${a}-${a - val})`;
+                } else if (r < 0.7) {
+                    // Simple addition
+                    const a = Math.floor(Math.random() * (val + 1));
+                    return `(${a}+${val - a})`;
+                } else if (r < 0.85) {
+                    // XOR
+                    const mask = Math.floor(Math.random() * 65535);
+                    return `bit32.bxor(${val ^ mask},${mask})`;
+                } else {
+                    // Multiply + remainder
+                    if (val >= 2) {
+                        for (let d = 2; d <= Math.min(val, 12); d++) {
+                            if (val % d === 0) return `(${d}*${val/d})`;
                         }
-                        const a = val + Math.floor(Math.random() * 9999) + 500;
-                        return `(${a}-${a - val})`;
                     }
-                    default: { // bit32.band(a, mask) where a=val and mask covers all bits
-                        const extra = Math.floor(Math.random() * 65280) + 256;
-                        return `bit32.band(${val + extra * 256},${255})`;
-                    }
+                    const a = val + Math.floor(Math.random() * 5000) + 100;
+                    return `(${a}-${a - val})`;
                 }
             }
             
@@ -2651,14 +2643,11 @@ print('Hello World!')"></textarea>
             code = code.replace(/\n+/g, ' ');
             code = code.replace(/\s+/g, ' ');
             
-            // Ensure keywords always have spaces around them
-            const keywords = ['local', 'function', 'end', 'if', 'then', 'else', 'elseif', 
-                            'for', 'in', 'do', 'while', 'repeat', 'until', 'return', 'and', 'or', 'not'];
-            
-            for (const kw of keywords) {
-                code = code.replace(new RegExp(`([^\\s])\\b${kw}\\b`, 'g'), `$1 ${kw}`);
-                code = code.replace(new RegExp(`\\b${kw}\\b([^\\s])`, 'g'), `${kw} $1`);
-            }
+            // Ensure keywords have spaces around them (single-pass regex)
+            const kwPattern = /([^\s])(\b(?:local|function|end|if|then|else|elseif|for|in|do|while|repeat|until|return|and|or|not)\b)/g;
+            const kwPattern2 = /(\b(?:local|function|end|if|then|else|elseif|for|in|do|while|repeat|until|return|and|or|not)\b)([^\s])/g;
+            code = code.replace(kwPattern, '$1 $2');
+            code = code.replace(kwPattern2, '$1 $2');
             
             // Collapse multiple spaces
             code = code.replace(/\s+/g, ' ');
@@ -2691,10 +2680,94 @@ print('Hello World!')"></textarea>
             performObfuscation();
         }
         
+        // ==================== LUA SYNTAX CHECKER ====================
+        function checkLuaSyntax(code) {
+            const errors = [];
+            
+            // Remove strings and comments to avoid false positives
+            let cleaned = code;
+            // Remove long strings [[...]]
+            cleaned = cleaned.replace(/\[\[([\s\S]*?)\]\]/g, (m) => ' '.repeat(m.length));
+            // Remove long comments --[[...]]
+            cleaned = cleaned.replace(/--\[\[[\s\S]*?\]\]/g, (m) => ' '.repeat(m.length));
+            // Remove single-line comments
+            cleaned = cleaned.replace(/--[^\n]*/g, (m) => ' '.repeat(m.length));
+            // Remove double-quoted strings
+            cleaned = cleaned.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (m) => ' '.repeat(m.length));
+            // Remove single-quoted strings
+            cleaned = cleaned.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (m) => ' '.repeat(m.length));
+            
+            // Check balanced parentheses/brackets
+            let parens = 0, brackets = 0, braces = 0;
+            for (let i = 0; i < cleaned.length; i++) {
+                const c = cleaned[i];
+                if (c === '(') parens++;
+                else if (c === ')') { parens--; if (parens < 0) { errors.push('多余的右括号 ")"'); break; } }
+                else if (c === '[') brackets++;
+                else if (c === ']') { brackets--; if (brackets < 0) { errors.push('多余的右括号 "]"'); break; } }
+                else if (c === '{') braces++;
+                else if (c === '}') { braces--; if (braces < 0) { errors.push('多余的右括号 "}"'); break; } }
+            }
+            if (parens > 0) errors.push(`缺少 ${parens} 个右括号 ")"`);
+            if (brackets > 0) errors.push(`缺少 ${brackets} 个右括号 "]"`);
+            if (braces > 0) errors.push(`缺少 ${braces} 个右括号 "}"`);
+            
+            // Check block matching: do/end, function/end, if/then/end, repeat/until
+            const blockOpeners = (cleaned.match(/\b(function|do|if|repeat)\b/g) || []);
+            const blockClosers = (cleaned.match(/\b(end|until)\b/g) || []);
+            // Count each type
+            let funcCount = 0, doCount = 0, ifCount = 0, repeatCount = 0;
+            let endCount = 0, untilCount = 0;
+            for (const w of blockOpeners) {
+                if (w === 'function') funcCount++;
+                else if (w === 'do') doCount++;
+                else if (w === 'if') ifCount++;
+                else if (w === 'repeat') repeatCount++;
+            }
+            for (const w of blockClosers) {
+                if (w === 'end') endCount++;
+                else if (w === 'until') untilCount++;
+            }
+            const expectedEnd = funcCount + doCount + ifCount;
+            if (endCount < expectedEnd) errors.push(`缺少 ${expectedEnd - endCount} 个 "end"`);
+            if (endCount > expectedEnd) errors.push(`多余 ${endCount - expectedEnd} 个 "end"`);
+            if (untilCount < repeatCount) errors.push(`缺少 ${repeatCount - untilCount} 个 "until"`);
+            if (untilCount > repeatCount) errors.push(`多余 ${untilCount - repeatCount} 个 "until"`);
+            
+            // Check if/then pairing
+            const ifMatches = cleaned.match(/\bif\b/g) || [];
+            const thenMatches = cleaned.match(/\bthen\b/g) || [];
+            if (thenMatches.length < ifMatches.length) errors.push(`if 语句缺少 "then"`);
+            
+            // Check for unclosed strings in original code
+            let inSingle = false, inDouble = false, escaped = false;
+            for (let i = 0; i < code.length; i++) {
+                const c = code[i];
+                if (escaped) { escaped = false; continue; }
+                if (c === '\\') { escaped = true; continue; }
+                if (c === '"' && !inSingle) inDouble = !inDouble;
+                else if (c === "'" && !inDouble) inSingle = !inSingle;
+                // Reset on newline (Lua doesn't allow multiline unescaped strings)
+                if (c === '\n' && (inSingle || inDouble)) {
+                    errors.push('未闭合的字符串');
+                    break;
+                }
+            }
+            
+            return errors;
+        }
+
         // Actual obfuscation logic (called after captcha verified)
         async function performObfuscation() {
             const input = document.getElementById('inputCode').value;
             const btn = document.getElementById('obfuscateBtn');
+            
+            // Syntax check before obfuscation
+            const syntaxErrors = checkLuaSyntax(input);
+            if (syntaxErrors.length > 0) {
+                showToast('语法错误: ' + syntaxErrors[0], 'error');
+                return;
+            }
             
             btn.disabled = true;
             showProgressOverlay();
@@ -2728,7 +2801,7 @@ print('Hello World!')"></textarea>
                 for (let i = 0; i < stages.length; i++) {
                     const percent = Math.round((i / stages.length) * 100);
                     updateProgress(percent, stages[i]);
-                    await sleep(250);
+                    await sleep(80);
                     
                     switch(i) {
                         case 1: code = obfuscateVariables(code); break;
