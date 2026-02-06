@@ -2274,13 +2274,15 @@ print('Hello World!')"></textarea>
         // ==================== OPAQUE PREDICATES ====================
         // Conditions that ALWAYS evaluate to true but look complex
         function generateOpaquePredicate() {
+            // IMPORTANT: predicates must NOT call tostring/print/warn/error/tonumber
+            // because function call obfuscation would replace them and cause nil refs
             const predicates = [
                 () => { const v=generateVarName(); return `if math.pi>3 and math.pi<4 then local ${v}=0 else return""end `; },
-                () => { const v=generateVarName(); return `if type(tostring)~="function"then return""end `; },
                 () => { const v=generateVarName(); return `if bit32.bxor(${Math.floor(Math.random()*999)},${Math.floor(Math.random()*999)})>-1 then local ${v}=0 else return nil end `; },
-                () => { const v=generateVarName(); return `if #tostring(${Math.floor(Math.random()*99999)})>0 then local ${v}=0 else return nil end `; },
-                () => { return `if string.len(tostring(math.huge))>0 then else return nil end `; },
-                () => { return ``; }, // Sometimes no predicate (unpredictable)
+                () => { const v=generateVarName(); return `if ${Math.floor(Math.random()*999)+1}>${Math.floor(Math.random()*10)} then local ${v}=0 else return nil end `; },
+                () => { const v=generateVarName(); return `if bit32.band(${Math.floor(Math.random()*9999)},255)>-1 then local ${v}=0 else return nil end `; },
+                () => { return ``; },
+                () => { return ``; },
                 () => { return ``; },
             ];
             return predicates[Math.floor(Math.random()*predicates.length)]();
@@ -2295,8 +2297,8 @@ print('Hello World!')"></textarea>
             const patterns = [
                 // Interconnected: variable used in a later condition
                 () => { const a=v(),b=v(); return `local ${a}=bit32.bxor(${n()},${n()})local ${b}=${a}%256`; },
-                // Calls real Roblox API that exists but result unused
-                () => `local ${v()}=type(game)=="userdata"and tostring(${n()})or""`,
+                // Type check that looks real
+                () => `local ${v()}=type(game)=="userdata"and type(workspace)or""`,
                 // pcall wrapped fake computation
                 () => { const a=v(); return `local _,${a}=pcall(function()return bit32.band(${n()},${n()})end)`; },
                 // Fake coroutine
@@ -2312,7 +2314,7 @@ print('Hello World!')"></textarea>
                 // Fake task.delay
                 () => `if false then task.delay(0,function()end)end`,
                 // Nested function definition that mimics encryption
-                () => { const a=v(),b=v(),c=v(); return `local ${a}=function(${b})local ${c}=0 for ${v()}=1,#tostring(${b})do ${c}=${c}+1 end return ${c} end`; },
+                () => { const a=v(),b=v(),c=v(); return `local ${a}=function(${b})local ${c}=0 for ${v()}=1,#({${b}}[1]or"")do ${c}=${c}+1 end return ${c} end`; },
             ];
             return patterns[Math.floor(Math.random() * patterns.length)]();
         }
@@ -2364,21 +2366,26 @@ print('Hello World!')"></textarea>
             return code;
         }
 
-        // Obfuscate function calls - use hidden function table with encrypted keys
+        // Obfuscate function calls - use hidden function table with XOR-encoded integer keys
+        // DO NOT use encrypted string keys - they generate IIFEs with opaque predicates
+        // that call functions like tostring(), creating circular nil references
         function obfuscateFunctionCalls(code) {
-            const funcNames = ['print', 'warn', 'error', 'tostring', 'tonumber'];
+            const funcNames = ['print', 'warn', 'error'];
             const used = funcNames.filter(fn => new RegExp(`\\b${fn}\\s*\\(`).test(code));
             if (used.length === 0) return code;
 
             const tableVar = generateVarName();
-            const entries = used.map(fn => `[${encryptString(fn)}]=${fn}`);
+            const xorKey = Math.floor(Math.random()*9000)+1000;
+            // Use XOR-encoded integer keys - simple, reliable, no encryption IIFEs needed
+            const entries = used.map((fn, idx) => `[bit32.bxor(${(idx+1)^xorKey},${xorKey})]=${fn}`);
 
             // Replace function calls with table lookups
-            for (const fn of used) {
-                code = code.replace(new RegExp(`\\b${fn}\\s*\\(`, 'g'), `${tableVar}[${encryptString(fn)}](`);
+            for (let idx = 0; idx < used.length; idx++) {
+                const fn = used[idx];
+                code = code.replace(new RegExp(`\\b${fn}\\s*\\(`, 'g'), `${tableVar}[bit32.bxor(${(idx+1)^xorKey},${xorKey})](`);
             }
 
-            // Prepend function table (less obvious than local x=print)
+            // Prepend function table
             code = `local ${tableVar}={${entries.join(',')}} ` + code;
             return code;
         }
@@ -2489,7 +2496,9 @@ print('Hello World!')"></textarea>
             
             // Roblox environment verification
             code += `local ${vEnv}=type(game)=="userdata"and type(workspace)=="userdata"and type(Instance)=="table"or type(Instance)=="userdata"` + ' ';
-            code += `local ${vCheck}=${vHash}(tostring(game))` + ' ';
+            const vStr=v();
+            code += `local ${vStr}=type(game)=="userdata"and"Roblox"or"" `;
+            code += `local ${vCheck}=${vHash}(${vStr})` + ' ';
             
             // Heavy junk mixed in
             code += generateHeavyJunk();
@@ -2502,12 +2511,12 @@ print('Hello World!')"></textarea>
             code = code.replace(/--\[\[[\s\S]*?\]\]/g, '');
             code = code.replace(/--[^\n]*/g, '');
             
-            // Normalize whitespace - use space as separator first
+            // Normalize whitespace
             code = code.replace(/\r\n/g, '\n');
             code = code.replace(/\n+/g, ' ');
             code = code.replace(/\s+/g, ' ');
             
-            // Add spaces where needed for keywords
+            // Ensure keywords always have spaces around them
             const keywords = ['local', 'function', 'end', 'if', 'then', 'else', 'elseif', 
                             'for', 'in', 'do', 'while', 'repeat', 'until', 'return', 'and', 'or', 'not'];
             
@@ -2516,24 +2525,8 @@ print('Hello World!')"></textarea>
                 code = code.replace(new RegExp(`\\b${kw}\\b([^\\s])`, 'g'), `${kw} $1`);
             }
             
-            // Clean up extra spaces
+            // Collapse multiple spaces
             code = code.replace(/\s+/g, ' ');
-            code = code.replace(/\s*([{}\[\]()=+\-*/<>,.])\s*/g, '$1');
-            code = code.replace(/\s*\.\.\s*/g, '..');
-            
-            // Ensure proper spacing around keywords
-            code = code.replace(/\)local\b/g, ') local');
-            code = code.replace(/\bend local\b/g, 'end local');
-            code = code.replace(/\bend if\b/g, 'end if');
-            code = code.replace(/\bend for\b/g, 'end for');
-            code = code.replace(/\bend function\b/g, 'end function');
-            code = code.replace(/\bthen local\b/g, 'then local');
-            code = code.replace(/\bdo local\b/g, 'do local');
-            code = code.replace(/\bendlocal\b/g, 'end local');
-            code = code.replace(/\bthenlocal\b/g, 'then local');
-            code = code.replace(/\bdolocal\b/g, 'do local');
-            
-            // Remove any accidental original code at the end
             code = code.trim();
             
             // Add final junk to mask end of code
